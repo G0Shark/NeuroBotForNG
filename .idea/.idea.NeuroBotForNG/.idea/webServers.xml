@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="d88e2e98-fced-4a14-b93d-507eede4e0d4" name="ngpn">
+        <fileTransfer rootFolder="/root/AING/" accessType="SFTP" host="151.245.140.171" port="2245" sshConfigId="0cc885f5-77f0-4f39-b312-4bcd1887dfb0" sshConfig="root@151.245.140.171:2245 key" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

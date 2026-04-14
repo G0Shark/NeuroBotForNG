@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+using DotNetEnv;
 using Groq;
 using GroqSharp.Models;
 using Telegram.Bot;
@@ -15,6 +16,7 @@ class Program
     
     static async Task Main(string[] args)
     {
+        Env.Load();
         var cts = new CancellationTokenSource();
         bot = new TelegramBotClient(Environment.GetEnvironmentVariable("TG_BOT_TOKEN")??"", cancellationToken: cts.Token);
         bot.OnMessage += OnMessage;

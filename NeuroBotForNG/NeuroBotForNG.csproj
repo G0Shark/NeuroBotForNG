@@ -9,6 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="DotNetEnv" Version="3.1.1" />
       <PackageReference Include="Groq" Version="0.0.0-dev.6" />
       <PackageReference Include="GroqSharp" Version="1.1.2" />
       <PackageReference Include="HuggingFaceClient" Version="1.0.3" />
