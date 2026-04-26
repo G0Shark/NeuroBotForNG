@@ -26,6 +26,7 @@ class Program
         });
         codexThread = codex.StartThread(new ThreadOptions
         {
+            SkipGitRepoCheck = true,
             Model = "gpt-5.5"
         });
         
@@ -171,6 +172,7 @@ class Program
                 });
                 codexThread = codex.StartThread(new ThreadOptions
                 {
+                    SkipGitRepoCheck = true,
                     Model = "gpt-5.5"
                 });
         
