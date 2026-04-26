@@ -22,7 +22,7 @@ class Program
         
         var codex = new Codex(new CodexOptions
         {
-            CodexPathOverride = ".\\codex"
+            CodexPathOverride = Environment.GetEnvironmentVariable("CODEX_PATH")!
         });
         codexThread = codex.StartThread(new ThreadOptions
         {
