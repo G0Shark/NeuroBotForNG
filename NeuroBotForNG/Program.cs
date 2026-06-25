@@ -171,7 +171,7 @@ class Program
                                     chatId: message.Chat.Id,
                                     messageId: loadingMessage.MessageId,
                                     text: response.Content[0].Text,
-                                    parseMode: ParseMode.MarkdownV2
+                                    parseMode: ParseMode.Markdown
                                 );
                             }
                             catch (Exception e)
@@ -179,7 +179,7 @@ class Program
                                 await bot.EditMessageText(
                                     chatId: message.Chat.Id,
                                     messageId: loadingMessage.MessageId,
-                                    text: response.Content[0].Text + "\n*⛔ Ошибка MARKDOWN*"
+                                    text: response.Content[0].Text + "\n⛔ Ошибка MARKDOWN"
                                 );
                             }
                             return;
