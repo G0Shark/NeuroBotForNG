@@ -1,38 +1,40 @@
-﻿﻿using System.Text.RegularExpressions;
- using CodexNet;
- using DotNetEnv;
-using Groq;
-using GroqSharp.Models;
+﻿using System.ClientModel;
+using DotNetEnv;
+using NeuroBotForNG;
+using OpenAI;
+using OpenAI.Chat;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Message = Telegram.Bot.Types.Message;
-using GroqClient = Groq.GroqClient;
-using Thread = CodexNet.Thread;
 
 class Program
 {
     private static TelegramBotClient bot;
     private static Queue<string> lastMessages = new Queue<string>();
     private const int MaxMessages = 500;
-    static Thread codexThread;
+    
+    private static ChatCompletionOptions competitionOptions;
+    private static ChatClient client;
+    private static List<ChatMessage> messages;
     static async Task Main(string[] args)
     {
         Env.Load();
         
-        var codex = new Codex(new CodexOptions
-        {
-            CodexPathOverride = Environment.GetEnvironmentVariable("CODEX_PATH")!
-        });
-        codexThread = codex.StartThread(new ThreadOptions
-        {
-            SkipGitRepoCheck = true,
-            Model = "gpt-5.5"
-        });
+        client = new(
+            model: "mimo-v2.5-pro",
+            credential: new ApiKeyCredential(Environment.GetEnvironmentVariable("OPENAI_API_KEY")),
+            options: new OpenAIClientOptions()
+            {
+                Endpoint = new Uri(Environment.GetEnvironmentVariable("OPENAI_BASE_URL"))
+            });
         
         Console.WriteLine("warmup");
-        
-        await codexThread.RunAsync(File.ReadAllText("./system_prompt.txt"));
+
+        competitionOptions = Tools.GetTools();
+        messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(File.ReadAllText("./system_prompt.txt"))
+        };
         
         Console.WriteLine("warmup ended");
         
@@ -57,26 +59,7 @@ class Program
         Console.WriteLine(update.Type);
         if (update.Message.Type == MessageType.Voice)
         {
-            Console.WriteLine("voice msg");
-            using var client = new Groq.GroqClient(Environment.GetEnvironmentVariable("GROQ_TOKEN")??"");
-            string resp = "";
-            
-            using (var ms = new MemoryStream())
-            {
-                await bot.DownloadFile(await bot.GetFile(update.Message.Voice.FileId), ms, CancellationToken.None);
-                
-                var request = new CreateTranscriptionRequest { 
-                    Filename = "sample", 
-                    File = ms.ToArray(),
-                    Model = CreateTranscriptionRequestModel.WhisperLargeV3,
-                    Language = "ru"    
-                };
-                var response = await client.Audio.CreateTranscriptionAsync(request);
-                resp = response.Text;
-            }
-            
-            await bot.SendMessage(update.Message.Chat, resp);
-            Console.WriteLine("sended");
+            await VoiceTranscription.Handler(update.Message, bot);
             return;
         }
         
@@ -91,37 +74,7 @@ class Program
         
         if (message.Type == MessageType.Voice)
         {
-            Console.WriteLine("voice msg");
-            using var client = new Groq.GroqClient(Environment.GetEnvironmentVariable("GROQ_TOKEN")??"");
-            string resp = "";
-
-            Console.WriteLine("start ms");
-            using (var ms = new MemoryStream())
-            {
-                Console.WriteLine("download");
-                await bot.DownloadFile(await bot.GetFile(message.Voice.FileId), ms, CancellationToken.None);
-                Console.WriteLine("end");
-                var request = new CreateTranscriptionRequest { 
-                    Filename = message.MessageId+".ogg", 
-                    File = ms.ToArray(),
-                    Model = CreateTranscriptionRequestModel.WhisperLargeV3,
-                    Language = "ru"    
-                };
-                Console.WriteLine("send request");
-                try
-                {
-                    var response = await client.Audio.CreateTranscriptionAsync(request);
-                    resp = response.Text;
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e);
-                }
-                Console.WriteLine("end request");
-            }
-            Console.WriteLine("sending...");
-            await bot.SendMessage(message.Chat, resp, replyParameters:new ReplyParameters{MessageId = message.MessageId});
-            Console.WriteLine("sended");
+            await VoiceTranscription.Handler(message, bot);
             return;
         }
         
@@ -140,7 +93,7 @@ class Program
             return;
         }
 
-        if (message.Text.StartsWith("/reset"))
+        /*if (message.Text.StartsWith("/reset"))
         {
             if (message.From.Id != 5061499376)
             {
@@ -182,74 +135,96 @@ class Program
         
                 Console.WriteLine("warmup ended");
             }
-        }
+        }*/
         
         if (message.Text.StartsWith("/ask"))
         {
             _ = Task.Run(async () =>
             {
+                Message loadingMessage = await bot.SendMessage(
+                    chatId: message.Chat,
+                    text: "⌛ *Генерирую ответ...*",
+                    parseMode: ParseMode.Markdown,
+                    replyParameters: new ReplyParameters
+                    {
+                        MessageId = message.MessageId
+                    }
+                );
                 try
                 {
-                    var loadingMessage = await bot.SendMessage(
-                        chatId: message.Chat,
-                        text: "⌛ *Генерирую ответ...*",
-                        parseMode: ParseMode.Markdown,
-                        replyParameters: new ReplyParameters
-                        {
-                            MessageId = message.MessageId
-                        }
-                    );
-
-                    var turn = await codexThread.RunAsync(message.From.Username + ": " + message.Text);
-
-                    if (turn.FinalResponse.Contains("GET_HISTORY"))
-                    {
-                        await bot.EditMessageText(
-                            chatId: message.Chat.Id,
-                            messageId: loadingMessage.MessageId,
-                            text: "⌛ *Потребовалась история сообщений, скоро отвечу...*",
-                            parseMode: ParseMode.Markdown
-                        );
-
-                        turn = await codexThread.RunAsync("Сводка последних сообщений: \n" + GetAllMessages());
-                    }
-
-                    if (turn.FinalResponse.Contains("READ_MEMORY"))
-                    {
-                        await bot.EditMessageText(
-                            chatId: message.Chat.Id,
-                            messageId: loadingMessage.MessageId,
-                            text: "⌛ *Потребовалась прочитать память, скоро отвечу...*",
-                            parseMode: ParseMode.Markdown
-                        );
-
-                        turn = await codexThread.RunAsync("Долгосрочная память: \n" + File.ReadAllText("./memory.txt"));
-                    }
+                    messages.Add(new UserChatMessage(formattedMessage));
                     
-                    if (turn.FinalResponse.Contains("WRITE_MEMORY"))
+                    while (true)
                     {
-                        await bot.EditMessageText(
-                            chatId: message.Chat.Id,
-                            messageId: loadingMessage.MessageId,
-                            text: "✏️ *Добавление заметок в память...*",
-                            parseMode: ParseMode.Markdown
+                        ChatCompletion response = await client.CompleteChatAsync(
+                            messages,
+                            competitionOptions
                         );
 
-                        File.AppendAllText("./memory.txt", "\n" + turn.FinalResponse.Substring(12));
+                        if (response.FinishReason == ChatFinishReason.Stop)
+                        {
+                            messages.Add(new AssistantChatMessage(response.Content[0].Text));
+                            
+                            try
+                            {
+                                await bot.EditMessageText(
+                                    chatId: message.Chat.Id,
+                                    messageId: loadingMessage.MessageId,
+                                    text: response.Content[0].Text,
+                                    parseMode: ParseMode.MarkdownV2
+                                );
+                            }
+                            catch (Exception e)
+                            {
+                                await bot.EditMessageText(
+                                    chatId: message.Chat.Id,
+                                    messageId: loadingMessage.MessageId,
+                                    text: response.Content[0].Text + "\n*⛔ Ошибка MARKDOWN*"
+                                );
+                            }
+                            return;
+                        }
                         
-                        turn = await codexThread.RunAsync("Память обновлена, нынешняя память: \n" + File.ReadAllText("./memory.txt"));
+                        if (response.FinishReason == ChatFinishReason.ToolCalls)
+                        {
+                            foreach (var call in response.ToolCalls)
+                            {
+                                try
+                                {
+                                    await bot.EditMessageText(
+                                        chatId: message.Chat.Id,
+                                        messageId: loadingMessage.MessageId,
+                                        text: $"⚙️ *Потребовался инструмент:* `{call.FunctionName}` (ID: {call.Id})",
+                                        parseMode: ParseMode.Markdown
+                                    );
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine(e);
+                                }
+                                
+                                if (call.FunctionName == "get_msg_history")
+                                {
+                                    messages.Add(new AssistantChatMessage(response));
+                                    messages.Add(new ToolChatMessage(call.Id, GetAllMessages()));
+                                }
+                                else
+                                {
+                                    Tools.RunTool(call, messages, response);
+                                }
+                            }
+                        }
                     }
-
-                    await bot.EditMessageText(
-                        chatId: message.Chat.Id,
-                        messageId: loadingMessage.MessageId,
-                        text: turn.FinalResponse,
-                        parseMode: ParseMode.Markdown
-                    );
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex);
+                    
+                    await bot.EditMessageText(
+                        chatId: message.Chat.Id,
+                        messageId: loadingMessage.MessageId,
+                        text: "🚨 Случилась необработанная ошибка: " + ex.Message + "\n\nStackTrace: " + ex.StackTrace
+                    );
                 }
             });
 
@@ -261,6 +236,19 @@ class Program
         {
             lastMessages.Dequeue();
         }
+    }
+    
+    static string EscapeMarkdownV2(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return "";
+
+        var chars = new[] { "_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!" };
+
+        foreach (var ch in chars)
+            text = text.Replace(ch, "\\" + ch);
+
+        return text;
     }
     
     private static string GetAllMessages()
