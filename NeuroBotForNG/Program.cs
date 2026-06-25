@@ -164,13 +164,15 @@ class Program
                         if (response.FinishReason == ChatFinishReason.Stop)
                         {
                             messages.Add(new AssistantChatMessage(response.Content[0].Text));
+
+                            string end = $"\n\n`{response.Usage.TotalTokenCount} токенов`";
                             
                             try
                             {
                                 await bot.EditMessageText(
                                     chatId: message.Chat.Id,
                                     messageId: loadingMessage.MessageId,
-                                    text: response.Content[0].Text,
+                                    text: response.Content[0].Text + end,
                                     parseMode: ParseMode.Markdown
                                 );
                             }
@@ -179,7 +181,8 @@ class Program
                                 await bot.EditMessageText(
                                     chatId: message.Chat.Id,
                                     messageId: loadingMessage.MessageId,
-                                    text: response.Content[0].Text + "\n⛔ Ошибка MARKDOWN"
+                                    text: EscapeMarkdownV2(response.Content[0].Text) + $"{end} | *⛔ Ошибка MARKDOWN*",
+                                    parseMode: ParseMode.Markdown
                                 );
                             }
                             return;

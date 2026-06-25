@@ -9,7 +9,7 @@ public static class Tools
     {
         switch (call.FunctionName)
         {
-            case nameof(HttpGet):
+            case nameof(http_get):
             {
                 using JsonDocument argumentsJson = JsonDocument.Parse(call.FunctionArguments);
                 bool hasLocation = argumentsJson.RootElement.TryGetProperty("url", out JsonElement url);
@@ -19,7 +19,7 @@ public static class Tools
                     throw new ArgumentNullException(nameof(url), "The url argument is required.");
                 }
 
-                string toolResult = HttpGet(url.ToString());
+                string toolResult = http_get(url.ToString());
                 messages.Add(new AssistantChatMessage(response));
                 messages.Add(new ToolChatMessage(call.Id, toolResult));
                 break;
@@ -41,7 +41,7 @@ public static class Tools
         );
         
         ChatTool httpGet = ChatTool.CreateFunctionTool(
-            functionName: nameof(HttpGet),
+            functionName: nameof(http_get),
             functionDescription: "Воспроизвести GET для ссылки под видом браузера и получить ответ",
             functionParameters: BinaryData.FromBytes("""
                                                      {
@@ -66,7 +66,7 @@ public static class Tools
 
     private static readonly HttpClient client = new HttpClient();
 
-    private static string HttpGet(string url)
+    private static string http_get(string url)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, url);
 
