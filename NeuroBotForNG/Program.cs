@@ -165,7 +165,7 @@ class Program
                         {
                             messages.Add(new AssistantChatMessage(response.Content[0].Text));
 
-                            string end = $"\n\n`{response.Usage.TotalTokenCount} токенов`";
+                            string end = $"\n\n`{response.Usage.TotalTokenCount} токенов` | ~{response.Usage.TotalTokenCount*0,0000001463} RUB";
                             
                             try
                             {
