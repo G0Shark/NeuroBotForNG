@@ -22,10 +22,10 @@ class Program
         
         client = new(
             model: "mimo-v2.5-pro",
-            credential: new ApiKeyCredential(Environment.GetEnvironmentVariable("OPENAI_API_KEY")),
+            credential: new ApiKeyCredential(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!),
             options: new OpenAIClientOptions()
             {
-                Endpoint = new Uri(Environment.GetEnvironmentVariable("OPENAI_BASE_URL"))
+                Endpoint = new Uri(Environment.GetEnvironmentVariable("OPENAI_BASE_URL")!)
             });
         
         Console.WriteLine("warmup");

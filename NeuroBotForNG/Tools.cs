@@ -1,11 +1,13 @@
+using System.Net;
 using System.Text.Json;
+using CoreRCON;
 using OpenAI.Chat;
 
 namespace NeuroBotForNG;
 
 public static class Tools
 {
-    public static void RunTool(ChatToolCall call, List<ChatMessage> messages, ChatCompletion response)
+    public static async Task RunTool(ChatToolCall call, List<ChatMessage> messages, ChatCompletion response)
     {
         switch (call.FunctionName)
         {
@@ -20,6 +22,21 @@ public static class Tools
                 }
 
                 string toolResult = http_get(url.ToString());
+                messages.Add(new AssistantChatMessage(response));
+                messages.Add(new ToolChatMessage(call.Id, toolResult));
+                break;
+            }
+            case nameof(msng_rcon):
+            {
+                using JsonDocument argumentsJson = JsonDocument.Parse(call.FunctionArguments);
+                bool hasCommand = argumentsJson.RootElement.TryGetProperty("command", out JsonElement command);
+
+                if (!hasCommand)
+                {
+                    throw new ArgumentNullException(nameof(command), "The command argument is required.");
+                }
+
+                string toolResult = await msng_rcon(command.ToString());
                 messages.Add(new AssistantChatMessage(response));
                 messages.Add(new ToolChatMessage(call.Id, toolResult));
                 break;
@@ -56,11 +73,28 @@ public static class Tools
                                                      }
                                                      """u8.ToArray())
         );
+        
+        ChatTool msngRcon = ChatTool.CreateFunctionTool(
+            functionName: nameof(msng_rcon),
+            functionDescription: "Выполнить команду на Minecraft сервере (MSNG) через RCON и получить ответ",
+            functionParameters: BinaryData.FromBytes("""
+                                                     {
+                                                         "type": "object",
+                                                         "properties": {
+                                                             "command": {
+                                                                 "type": "string",
+                                                                 "description": "Команда для выполнения"
+                                                             }
+                                                         },
+                                                         "required": [ "command" ]
+                                                     }
+                                                     """u8.ToArray())
+        );
 
 
         return new ChatCompletionOptions()
         {
-            Tools = { getMsgHistory, httpGet }
+            Tools = { getMsgHistory, httpGet, msngRcon }
         };
     }
 
@@ -87,5 +121,18 @@ public static class Tools
         response.EnsureSuccessStatusCode();
 
         return response.Content.ReadAsStringAsync().Result;
+    }
+
+    private static RCON rcon = new RCON(
+        IPAddress.Parse(Environment.GetEnvironmentVariable("MSNG_IP_ADDRESS")!),
+        25575,
+        Environment.GetEnvironmentVariable("MSNG_RCON_PASSWORD"));
+    
+    private static async Task<string> msng_rcon(string command)
+    {
+        await rcon.ConnectAsync();
+        string response = await rcon.SendCommandAsync(command);
+        rcon.Dispose();
+        return response;
     }
 }
