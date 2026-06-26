@@ -82,7 +82,7 @@ class Program
         {
             await bot.SendMessage(
                 chatId: message.Chat,
-                text: "⛔ *Я работаю только в группе NewGame!*\nЧтобы использовать меня - используйте /ask в *группе*",
+                text: "⛔ *Я работаю только в группе NewGame!*\nЧтобы использовать меня - используйте /ask в *группе*\nЛибо пересылай голосовое сообщение - я дам тебе его текст",
                 parseMode: ParseMode.Markdown,
                 replyParameters: new ReplyParameters
                 {

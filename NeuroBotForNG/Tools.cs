@@ -126,7 +126,7 @@ public static class Tools
     private static RCON rcon = new RCON(
         IPAddress.Parse(Environment.GetEnvironmentVariable("MSNG_IP_ADDRESS")!),
         25575,
-        Environment.GetEnvironmentVariable("MSNG_RCON_PASSWORD"));
+        Environment.GetEnvironmentVariable("MSNG_RCON_PASSWORD")!);
     
     private static async Task<string> msng_rcon(string command)
     {
