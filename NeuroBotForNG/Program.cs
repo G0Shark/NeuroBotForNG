@@ -78,7 +78,7 @@ class Program
             return;
         }
         
-        if (message.Chat.Id != -1002771374226)
+        if (message.Chat.Id != long.Parse(Environment.GetEnvironmentVariable("GROUP_ID")!))
         {
             await bot.SendMessage(
                 chatId: message.Chat,
