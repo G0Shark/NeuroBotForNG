@@ -13,7 +13,7 @@ public static class Logger
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write(" : ");
         Console.ForegroundColor = ConsoleColor.Red;
-        Console.Error.WriteLine("ERROR");
+        Console.Error.Write("ERROR");
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write("]");
         Console.ForegroundColor = ConsoleColor.White;
@@ -29,7 +29,7 @@ public static class Logger
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write(" : ");
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.Error.WriteLine("ERROR");
+        Console.Error.Write("WARN");
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write("]");
         Console.ForegroundColor = ConsoleColor.White;
@@ -45,7 +45,7 @@ public static class Logger
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write(" : ");
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.Error.WriteLine("LOG");
+        Console.Error.Write("LOG");
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write("]");
         Console.ForegroundColor = ConsoleColor.White;
@@ -61,7 +61,7 @@ public static class Logger
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write(" : ");
         Console.ForegroundColor = ConsoleColor.Magenta;
-        Console.Error.WriteLine(message.From!.FirstName);
+        Console.Error.Write(message.From!.FirstName);
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write("]");
         Console.ForegroundColor = ConsoleColor.White;

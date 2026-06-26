@@ -28,15 +28,11 @@ class Program
                 Endpoint = new Uri(Environment.GetEnvironmentVariable("OPENAI_BASE_URL")!)
             });
         
-        Console.WriteLine("warmup");
-
         competitionOptions = Tools.GetTools();
         messages = new List<ChatMessage>
         {
             new SystemChatMessage(File.ReadAllText("./system_prompt.txt"))
         };
-        
-        Console.WriteLine("warmup ended");
         
         var cts = new CancellationTokenSource();
         bot = new TelegramBotClient(Environment.GetEnvironmentVariable("TG_BOT_TOKEN")!, cancellationToken: cts.Token);
