@@ -69,8 +69,7 @@ class Program
     private static async Task OnMessage(Message message, UpdateType type)
     {
         string formattedMessage = $"{message.From.FirstName}: {message.Text}";
-        
-        Console.WriteLine(message.Type + " | " + formattedMessage);
+        Logger.Message(message);
         
         if (message.Type == MessageType.Voice)
         {
@@ -80,6 +79,7 @@ class Program
         
         if (message.Chat.Id != long.Parse(Environment.GetEnvironmentVariable("GROUP_ID")!))
         {
+            Logger.Warn($"Bot triggered in not allowed group: {message.Chat.Id}");
             await bot.SendMessage(
                 chatId: message.Chat,
                 text: "⛔ *Я работаю только в группе NewGame!*\nЧтобы использовать меня - используйте /ask в *группе*\nЛибо пересылай голосовое сообщение - я дам тебе его текст",
@@ -141,6 +141,7 @@ class Program
         {
             _ = Task.Run(async () =>
             {
+                Logger.Log($"ASK command arrived: {message.Id}");
                 Message loadingMessage = await bot.SendMessage(
                     chatId: message.Chat,
                     text: "⌛ *Генерирую ответ...*",
@@ -178,6 +179,7 @@ class Program
                             }
                             catch (Exception e)
                             {
+                                Logger.Warn("AI answer: Markdown error");
                                 await bot.EditMessageText(
                                     chatId: message.Chat.Id,
                                     messageId: loadingMessage.MessageId,
@@ -190,6 +192,7 @@ class Program
                         
                         if (response.FinishReason == ChatFinishReason.ToolCalls)
                         {
+                            Logger.Log($"AI call a tool: {message.Id}");
                             foreach (var call in response.ToolCalls)
                             {
                                 try
@@ -203,8 +206,10 @@ class Program
                                 }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine(e);
+                                    Logger.Error($"Error on toolcall message: {e.Message}");
                                 }
+                                
+                                Logger.Log($"AI tool called is {call.FunctionName} (ID: {call.Id})");
                                 
                                 if (call.FunctionName == "get_msg_history")
                                 {

@@ -8,23 +8,23 @@ public static class VoiceTranscription
 {
     public static async Task Handler(Message message, TelegramBotClient bot)
     {
-        Console.WriteLine("voice msg");
+        Logger.Log($"Voice message arrived: {message.Id}");
         using var client = new Groq.GroqClient(Environment.GetEnvironmentVariable("GROQ_TOKEN")??"");
         string resp = "";
 
-        Console.WriteLine("start ms");
+        Logger.Log($"Started MemoryStream");
         using (var ms = new MemoryStream())
         {
-            Console.WriteLine("download");
+            Logger.Log("Download voiceline");
             await bot.DownloadFile(await bot.GetFile(message.Voice.FileId), ms, CancellationToken.None);
-            Console.WriteLine("end");
+            Logger.Log("Download ended");
             var request = new CreateTranscriptionRequest { 
                 Filename = message.MessageId+".ogg", 
                 File = ms.ToArray(),
                 Model = CreateTranscriptionRequestModel.WhisperLargeV3,
                 Language = "ru"    
             };
-            Console.WriteLine("send request");
+            Logger.Log("Sending request to GROQ");
             try
             {
                 var response = await client.Audio.CreateTranscriptionAsync(request);
@@ -32,15 +32,17 @@ public static class VoiceTranscription
             }
             catch (Exception e)
             {
+                Logger.Error($"Transcription failed: {e.Message}");
+                
                 Console.WriteLine(e);
                 resp = $"⛔ Ошибка транскрипции сообщения: {e.Message}";
                 await bot.SendMessage(message.Chat, resp, replyParameters:new ReplyParameters{MessageId = message.MessageId});
             }
-            Console.WriteLine("end request");
+            Logger.Log("End request to GROQ");
         }
-        Console.WriteLine("sending...");
+        Logger.Log("Sending message to user");
         await bot.SendMessage(message.Chat, resp, replyParameters:new ReplyParameters{MessageId = message.MessageId});
-        Console.WriteLine("sended");
+        Logger.Log($"Completed: {message.Id}");
         return;
     }
 }
