@@ -61,10 +61,12 @@ public static class Logger
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write(" : ");
         Console.ForegroundColor = ConsoleColor.Magenta;
-        Console.Error.Write(message.From!.FirstName);
+        string sender = message.From?.FirstName ?? message.SenderChat?.Title ?? "Unknown";
+        Console.Error.Write(sender);
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Error.Write("]");
         Console.ForegroundColor = ConsoleColor.White;
-        Console.Error.Write(": " + message.Text + "\n");
+        string text = message.Text ?? message.Caption ?? $"[{message.Type}]";
+        Console.Error.Write(": " + text + "\n");
     }
 }

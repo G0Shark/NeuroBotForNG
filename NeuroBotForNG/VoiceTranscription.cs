@@ -8,8 +8,21 @@ public static class VoiceTranscription
 {
     public static async Task Handler(Message message, TelegramBotClient bot)
     {
+        if (message.Voice == null) return;
+
         Logger.Log($"Voice message arrived: {message.Id}");
-        using var client = new Groq.GroqClient(Environment.GetEnvironmentVariable("GROQ_TOKEN")??"");
+        string apiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY")
+            ?? Environment.GetEnvironmentVariable("GROQ_TOKEN")
+            ?? "";
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            Logger.Error("Groq API key is not set (GROQ_API_KEY or GROQ_TOKEN is required)");
+            await bot.SendMessage(message.Chat, "⛔ Ошибка: GROQ_API_KEY / GROQ_TOKEN не настроен в .env", replyParameters: new ReplyParameters { MessageId = message.MessageId });
+            return;
+        }
+
+        using var client = new Groq.GroqClient(apiKey);
         string resp = "";
 
         Logger.Log($"Started MemoryStream");
