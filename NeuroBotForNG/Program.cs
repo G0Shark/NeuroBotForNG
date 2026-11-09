@@ -23,6 +23,8 @@ class Program
     private static string systemPrompt = "";
     private static string chatModel = "gpt-4o-mini";
     private static string? openaiBaseUrl = null;
+    private static double tokenMultiplier = 1.0;
+    private static double tokensPerRuble = 666.666;
 
     static async Task Main(string[] args)
     {
@@ -36,6 +38,20 @@ class Program
 
         openaiBaseUrl = Environment.GetEnvironmentVariable("OPENAI_BASE_URL");
         chatModel = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
+
+        string multiplierStr = Environment.GetEnvironmentVariable("TOKEN_MULTIPLIER") ?? "1.0";
+        if (double.TryParse(multiplierStr.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedMult) && parsedMult > 0)
+        {
+            tokenMultiplier = parsedMult;
+        }
+
+        string rateStr = Environment.GetEnvironmentVariable("TOKENS_PER_RUBLE") ?? "666.666";
+        if (double.TryParse(rateStr.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedRate) && parsedRate > 0)
+        {
+            tokensPerRuble = parsedRate;
+        }
+
+        Logger.Log($"Тарификация: Множитель = {tokenMultiplier}x, Курс = {tokensPerRuble} токенов/₽");
 
         OpenAIClientOptions clientOptions = new OpenAIClientOptions();
         if (!string.IsNullOrWhiteSpace(openaiBaseUrl))
@@ -64,7 +80,9 @@ class Program
         
         competitionOptions = Tools.GetTools();
 
-        string promptPath = "./system_prompt.txt";
+        string promptPath = File.Exists("./system_prompt.txt")
+            ? "./system_prompt.txt"
+            : (File.Exists("./NeuroBotForNG/system_prompt.txt") ? "./NeuroBotForNG/system_prompt.txt" : "./system_prompt.txt");
         systemPrompt = File.Exists(promptPath)
             ? File.ReadAllText(promptPath)
             : "Ты — @NeuroBotForNG, полезный ИИ-помощник в Telegram.";
@@ -222,6 +240,7 @@ class Program
                 text: $"📊 *Статус NeuroBotForNG:*\n\n" +
                       $"• *Чат LLM:* `{chatModel}` ({endpointDisplay})\n" +
                       $"• *Голосовые STT:* Groq Whisper Large V3\n" +
+                      $"• *Тариф:* `{tokensPerRuble:G} токенов/₽` (множитель: `x{tokenMultiplier}`)\n" +
                       $"• *Сообщений в памяти диалога:* {messages.Count}\n" +
                       $"• *Сообщений в буфере чата:* {lastMessages.Count}/{MaxMessages}\n" +
                       $"• *Инструменты:* `get_msg_history`, `http_get`",
@@ -373,7 +392,7 @@ class Program
 
                             double elapsedSec = stopwatch.Elapsed.TotalSeconds;
                             string tokenInfo = response.Usage != null
-                                ? $"\n\n⚡ *{elapsedSec:F1}с* • `{response.Usage.TotalTokenCount} токенов` • *{chatModel}*"
+                                ? $"\n\n⚡ *{elapsedSec:F1}с* • `{FormatPrice(response.Usage.TotalTokenCount)}` • *{chatModel}*"
                                 : $"\n\n⚡ *{elapsedSec:F1}с* • *{chatModel}*";
 
                             var deleteMarkup = new InlineKeyboardMarkup(
@@ -610,6 +629,25 @@ class Program
         return chunks;
     }
     
+    private static string FormatPrice(int rawTokens)
+    {
+        double effectiveTokens = rawTokens * tokenMultiplier;
+        double rubles = effectiveTokens / tokensPerRuble;
+
+        if (rubles >= 0.01)
+        {
+            return $"{rubles:F2} ₽";
+        }
+        else if (rubles > 0)
+        {
+            return $"{rubles:F4} ₽";
+        }
+        else
+        {
+            return "0.00 ₽";
+        }
+    }
+
     private static string GetAllMessages()
     {
         lock (lastMessages)
