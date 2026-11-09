@@ -21,39 +21,46 @@ class Program
     private static readonly SemaphoreSlim chatLock = new SemaphoreSlim(1, 1);
 
     private static string systemPrompt = "";
-    private static string groqModel = "llama-3.3-70b-versatile";
+    private static string chatModel = "gpt-4o-mini";
+    private static string? openaiBaseUrl = null;
 
     static async Task Main(string[] args)
     {
         Env.Load();
 
-        string groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY")
-            ?? Environment.GetEnvironmentVariable("GROQ_TOKEN")
-            ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-            ?? "";
-
-        if (string.IsNullOrWhiteSpace(groqApiKey))
+        string openaiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
+        if (string.IsNullOrWhiteSpace(openaiApiKey))
         {
-            Logger.Error("Ключ GROQ_API_KEY / GROQ_TOKEN не найден в .env!");
+            Logger.Error("OPENAI_API_KEY не найден в .env!");
         }
 
-        string groqBaseUrl = Environment.GetEnvironmentVariable("GROQ_BASE_URL")
-            ?? Environment.GetEnvironmentVariable("OPENAI_BASE_URL")
-            ?? "https://api.groq.com/openai/v1";
+        openaiBaseUrl = Environment.GetEnvironmentVariable("OPENAI_BASE_URL");
+        chatModel = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
 
-        groqModel = Environment.GetEnvironmentVariable("GROQ_MODEL")
-            ?? Environment.GetEnvironmentVariable("OPENAI_MODEL")
-            ?? "llama-3.3-70b-versatile";
+        OpenAIClientOptions clientOptions = new OpenAIClientOptions();
+        if (!string.IsNullOrWhiteSpace(openaiBaseUrl))
+        {
+            clientOptions.Endpoint = new Uri(openaiBaseUrl);
+            Logger.Log($"Инициализация Chat клиента: Модель: {chatModel}, Custom Endpoint: {openaiBaseUrl}");
+        }
+        else
+        {
+            Logger.Log($"Инициализация Chat клиента: Модель: {chatModel}, Официальный OpenAI Endpoint");
+        }
 
-        Logger.Log($"Инициализация AI клиента: Модель: {groqModel}, Endpoint: {groqBaseUrl}");
+        client = new ChatClient(
+            model: chatModel,
+            credential: new ApiKeyCredential(openaiApiKey),
+            options: clientOptions
+        );
 
-        client = new(
-            model: groqModel,
-            credential: new ApiKeyCredential(groqApiKey),
-            options: new OpenAIClientOptions()
-            {
-                Endpoint = new Uri(groqBaseUrl)
-            });
+        string groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY")
+            ?? Environment.GetEnvironmentVariable("GROQ_TOKEN")
+            ?? "";
+        if (string.IsNullOrWhiteSpace(groqApiKey))
+        {
+            Logger.Warn("GROQ_API_KEY / GROQ_TOKEN не найден в .env (нужен для транскрипции голосовых через Groq Whisper)!");
+        }
         
         competitionOptions = Tools.GetTools();
 
@@ -196,9 +203,9 @@ class Program
                 chatId: message.Chat,
                 text: "🤖 *Команды @NeuroBotForNG:*\n\n" +
                       "• `/ask <вопрос>` — задать вопрос нейросети (или ответьте Reply на сообщение)\n" +
-                      "• `/reset` — сбросить контекст диалога бота\n" +
+                      "• `/reset` — сбросить контекст диалога бота (только для владельца)\n" +
                       "• `/status` — информация о модели и состоянии бота\n" +
-                      "• 🎤 *Голосовые сообщения* — отправьте голосовое в чат или перешлите для расшифровки\n\n" +
+                      "• 🎤 *Голосовые сообщения* — отправьте голосовое в чат или перешлите для расшифровки через Groq Whisper\n\n" +
                       "🛠 *Инструменты AI:* поиск информации в вебе (`http_get`) и чтение недавней истории чата (`get_msg_history`).",
                 parseMode: ParseMode.Markdown,
                 replyParameters: new ReplyParameters { MessageId = message.MessageId }
@@ -209,13 +216,13 @@ class Program
         // Команда /status
         if (IsCommand(text, "/status"))
         {
+            string endpointDisplay = !string.IsNullOrWhiteSpace(openaiBaseUrl) ? openaiBaseUrl : "api.openai.com";
             await bot.SendMessage(
                 chatId: message.Chat,
                 text: $"📊 *Статус NeuroBotForNG:*\n\n" +
-                      $"• *Провайдер:* Groq Cloud (LPU)\n" +
-                      $"• *LLM Модель:* `{groqModel}`\n" +
-                      $"• *STT Модель:* `whisper-large-v3`\n" +
-                      $"• *Сообщений в контексте диалога:* {messages.Count}\n" +
+                      $"• *Чат LLM:* `{chatModel}` ({endpointDisplay})\n" +
+                      $"• *Голосовые STT:* Groq Whisper Large V3\n" +
+                      $"• *Сообщений в памяти диалога:* {messages.Count}\n" +
                       $"• *Сообщений в буфере чата:* {lastMessages.Count}/{MaxMessages}\n" +
                       $"• *Инструменты:* `get_msg_history`, `http_get`",
                 parseMode: ParseMode.Markdown,
@@ -224,17 +231,41 @@ class Program
             return;
         }
 
-        // Команда /reset
-        if (IsCommand(text, "/reset"))
+        // Команда /reset или /clear - доступна только владельцу (5061499376)
+        if (IsCommand(text, "/reset") || IsCommand(text, "/clear"))
         {
+            long adminId = 5061499376;
+            if (long.TryParse(Environment.GetEnvironmentVariable("ADMIN_ID"), out long customAdminId))
+            {
+                adminId = customAdminId;
+            }
+
+            if (message.From?.Id != adminId)
+            {
+                await bot.SendMessage(
+                    chatId: message.Chat,
+                    text: "⛔ *Сброс контекста разрешён только мне)*",
+                    parseMode: ParseMode.Markdown,
+                    replyParameters: new ReplyParameters { MessageId = message.MessageId }
+                );
+                return;
+            }
+
             await chatLock.WaitAsync();
             try
             {
                 messages.Clear();
                 messages.Add(new SystemChatMessage(systemPrompt));
+                lock (lastMessages)
+                {
+                    lastMessages.Clear();
+                }
+
                 await bot.SendMessage(
                     chatId: message.Chat,
-                    text: "🔄 *Контекст диалога успешно сброшен!*\nПамять бота очищена и возвращена к исходному системному промпту.",
+                    text: "🔄 *История и контекст успешно сброшены!*\n\n" +
+                          "• Память диалога нейросети возвращена к системному промпту\n" +
+                          "• Буфер истории сообщений группы очищен",
                     parseMode: ParseMode.Markdown,
                     replyParameters: new ReplyParameters { MessageId = message.MessageId }
                 );
@@ -263,8 +294,7 @@ class Program
                         text: "💡 *Как использовать команду /ask:*\n\n" +
                               "• `/ask <вопрос>` — задайте вопрос нейросети\n" +
                               "• Ответьте *(Reply)* командой `/ask` на чужое сообщение, чтобы нейросеть ответила с его учетом\n\n" +
-                              $"✨ *Модель:* `{groqModel}` на Groq\n" +
-                              "⚡ *Скорость:* ~280 токенов/сек",
+                              $"✨ *Модель:* `{chatModel}`",
                         parseMode: ParseMode.Markdown,
                         replyParameters: new ReplyParameters { MessageId = message.MessageId }
                     );
@@ -343,8 +373,8 @@ class Program
 
                             double elapsedSec = stopwatch.Elapsed.TotalSeconds;
                             string tokenInfo = response.Usage != null
-                                ? $"\n\n⚡ *{elapsedSec:F1}с* • `{response.Usage.TotalTokenCount} токенов` • *Groq*"
-                                : $"\n\n⚡ *{elapsedSec:F1}с* • *Groq*";
+                                ? $"\n\n⚡ *{elapsedSec:F1}с* • `{response.Usage.TotalTokenCount} токенов` • *{chatModel}*"
+                                : $"\n\n⚡ *{elapsedSec:F1}с* • *{chatModel}*";
 
                             var deleteMarkup = new InlineKeyboardMarkup(
                                 InlineKeyboardButton.WithCallbackData("🗑 Удалить", $"del:{message.From?.Id ?? 0}")
@@ -444,10 +474,13 @@ class Program
         
         // Обычные сообщения сохраняем в очередь для инструмента get_msg_history
         string formattedForHistory = $"{senderName}: {text}";
-        lastMessages.Enqueue(formattedForHistory);
-        while (lastMessages.Count > MaxMessages)
+        lock (lastMessages)
         {
-            lastMessages.Dequeue();
+            lastMessages.Enqueue(formattedForHistory);
+            while (lastMessages.Count > MaxMessages)
+            {
+                lastMessages.Dequeue();
+            }
         }
     }
 
@@ -579,6 +612,9 @@ class Program
     
     private static string GetAllMessages()
     {
-        return string.Join("\n", lastMessages);
+        lock (lastMessages)
+        {
+            return string.Join("\n", lastMessages);
+        }
     }
 }
